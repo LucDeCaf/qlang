@@ -1,10 +1,16 @@
 const std = @import("std");
+const testing = std.testing;
 const token = @import("token.zig");
 const span = @import("span.zig");
 const Token = token.Token;
 const TokenType = token.TokenType;
 const Literal = token.Literal;
 const Span = span.Span;
+
+pub const ScannerError = struct {
+    message: []const u8,
+    span: Span,
+};
 
 pub const Scanner = struct {
     alloc: std.mem.Allocator,
@@ -44,32 +50,32 @@ pub const Scanner = struct {
             self.start = self.current;
             try self.scanToken();
         }
-        try self.addToken(.EOF, .void);
+        try self.addToken(.EOF, .none);
         return self.tokens;
     }
 
     fn scanToken(self: *Scanner) !void {
         switch (self.advance()) {
             // Single-char only
-            '(' => try self.addToken(.LEFT_PAREN, .void),
-            ')' => try self.addToken(.RIGHT_PAREN, .void),
-            '{' => try self.addToken(.LEFT_BRACE, .void),
-            '}' => try self.addToken(.RIGHT_BRACE, .void),
-            ',' => try self.addToken(.COMMA, .void),
-            '.' => try self.addToken(.DOT, .void),
-            '*' => try self.addToken(.STAR, .void),
-            ';' => try self.addToken(.SEMICOLON, .void),
+            '(' => try self.addToken(.LEFT_PAREN, .none),
+            ')' => try self.addToken(.RIGHT_PAREN, .none),
+            '{' => try self.addToken(.LEFT_BRACE, .none),
+            '}' => try self.addToken(.RIGHT_BRACE, .none),
+            ',' => try self.addToken(.COMMA, .none),
+            '.' => try self.addToken(.DOT, .none),
+            '*' => try self.addToken(.STAR, .none),
+            ';' => try self.addToken(.SEMICOLON, .none),
 
             // Single- or multiple-char
-            '+' => try self.addToken(if (self.match('=')) .PLUS_EQUAL else .PLUS, .void),
-            '-' => try self.addToken(if (self.match('=')) .MINUS_EQUAL else .MINUS, .void),
-            '=' => try self.addToken(if (self.match('=')) .EQUAL_EQUAL else .EQUAL, .void),
-            '!' => try self.addToken(if (self.match('=')) .BANG_EQUAL else .BANG, .void),
-            '>' => try self.addToken(if (self.match('=')) .GREATER_EQUAL else .GREATER, .void),
-            '<' => try self.addToken(if (self.match('=')) .LESS_EQUAL else .LESS, .void),
+            '+' => try self.addToken(if (self.match('=')) .PLUS_EQUAL else .PLUS, .none),
+            '-' => try self.addToken(if (self.match('=')) .MINUS_EQUAL else .MINUS, .none),
+            '=' => try self.addToken(if (self.match('=')) .EQUAL_EQUAL else .EQUAL, .none),
+            '!' => try self.addToken(if (self.match('=')) .BANG_EQUAL else .BANG, .none),
+            '>' => try self.addToken(if (self.match('=')) .GREATER_EQUAL else .GREATER, .none),
+            '<' => try self.addToken(if (self.match('=')) .LESS_EQUAL else .LESS, .none),
 
             // Comment or division
-            '/' => if (self.match('/')) self.comment() else try self.addToken(.SLASH, .void),
+            '/' => if (self.match('/')) self.comment() else try self.addToken(.SLASH, .none),
 
             // Whitespace
             ' ', '\t', '\r', '\n' => {},
@@ -122,11 +128,46 @@ pub const Scanner = struct {
     }
 
     fn number(self: *Scanner) !void {
-        // TODO
+        var found_dot = false;
+        while (!self.isAtEnd()) : (self.current += 1) {
+            const c = self.peek();
+
+            if (c == '.' and !found_dot) {
+                found_dot = true;
+                continue;
+            }
+
+            if (c < '0' and c > '9') {
+                break;
+            }
+        }
+
+        if (found_dot) {
+            const val = try std.fmt.parseFloat(f64, self.lexeme());
+            try self.addToken(.FLOAT, .{ .float = val });
+        } else {
+            const val = try std.fmt.parseInt(i64, self.lexeme(), 0);
+            try self.addToken(.INT, .{ .int = val });
+        }
     }
 
     fn identifier(self: *Scanner) !void {
-        // TODO
+        while (!self.isAtEnd()) {
+            const c = self.peek();
+            switch (c) {
+                '0'...'9', 'a'...'z', 'A'...'Z', '_' => self.current += 1,
+                else => break,
+            }
+        }
+
+        const ident = self.lexeme();
+        const keyword = Self.keyword_map.get(ident);
+
+        if (keyword) |kw| {
+            try self.addToken(kw, .none);
+        } else {
+            try self.addToken(.IDENT, .{ .string = ident });
+        }
     }
 
     fn advance(self: *Scanner) u8 {
@@ -165,7 +206,16 @@ pub const Scanner = struct {
     }
 };
 
-pub const ScannerError = struct {
-    message: []const u8,
-    span: Span,
-};
+fn testScanner(input: []const u8, expected: []Token) void {
+    input;
+    expected;
+}
+
+test "identifiers" {
+    testScanner(
+        "come stay for a while",
+        &.{
+            .{ .type = .IDENT, .lexeme = "come", .literal = .{ .string = "come" } },
+        },
+    );
+}

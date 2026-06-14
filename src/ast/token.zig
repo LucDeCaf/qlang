@@ -9,6 +9,16 @@ pub const Token = struct {
 
     const Self = @This();
 
+    pub fn from(type: TokenType, value: anytype) Self {
+        const literal = Literal.from(value);
+        return .{
+            .type = type,
+            .lexeme = lexeme,
+            .literal = literal,
+            .span = span,
+        };
+    }
+
     pub fn print(self: Self) void {
         switch (self.literal) {
             .void => std.debug.print("{s} ", .{@tagName(self.type)}),
@@ -24,6 +34,13 @@ pub const Literal = union(enum) {
     int: i64,
     float: f64,
     string: []const u8,
+
+    pub fn from(comptime value: anytype) Literal {
+        return switch (@TypeOf(value)) {
+            .comptime_int => .{ .int = value },
+            .comptime_float => .{ .float = value },
+        };
+    }
 };
 
 pub const TokenType = enum {
